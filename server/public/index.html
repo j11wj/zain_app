@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Waste — Overview</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">Smart Waste Admin</a>
+        <span class="navbar-text text-white-50 small">Live simulation</span>
+      </div>
+    </nav>
+    <div class="container-fluid">
+      <div class="row">
+        <aside class="col-md-2 py-4 sidebar">
+          <nav class="nav flex-column px-2">
+            <a class="nav-link active" href="/">Overview</a>
+            <a class="nav-link" href="/bins.html">Bins status</a>
+            <a class="nav-link" href="/alerts.html">Alerts</a>
+            <a class="nav-link" href="/reports.html">Reports</a>
+            <a class="nav-link" href="/clusters.html">Clusters</a>
+          </nav>
+        </aside>
+        <main class="col-md-10 py-4 px-4">
+          <h1 class="h3 mb-4">Dashboard overview</h1>
+          <div class="row g-3 mb-4" id="statRow"></div>
+          <div class="row g-3">
+            <div class="col-lg-8">
+              <div class="card stat-card">
+                <div class="card-body">
+                  <h2 class="h5 card-title">Fleet map</h2>
+                  <div id="map"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="card stat-card mb-3">
+                <div class="card-body">
+                  <h2 class="h5 card-title">Recent alerts</h2>
+                  <ul class="list-group list-group-flush small" id="alertList">
+                    <li class="list-group-item text-muted">Loading…</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="card stat-card">
+                <div class="card-body">
+                  <h2 class="h5 card-title">Quick stats</h2>
+                  <p class="small text-muted mb-0" id="routeSummary"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/common.js"></script>
+    <script>
+      let map;
+      let markers = [];
+
+      function binColor(fill) {
+        if (fill < 50) return "#2d6a4f";
+        if (fill <= 80) return "#e9c46a";
+        return "#c1121f";
+      }
+
+      async function refresh() {
+        const data = await fetchJson("/api/bins");
+        const bins = data.bins;
+        const avg =
+          bins.reduce((s, b) => s + b.fill_level, 0) / Math.max(bins.length, 1);
+        const fires = bins.filter((b) => b.fire_status).length;
+        const high = bins.filter((b) => b.fill_level > 80).length;
+
+        document.getElementById("statRow").innerHTML = `
+          <div class="col-md-3"><div class="card stat-card p-3"><div class="text-muted small">Bins online</div><div class="fs-3 fw-semibold">${bins.length}</div></div></div>
+          <div class="col-md-3"><div class="card stat-card p-3"><div class="text-muted small">Avg fill</div><div class="fs-3 fw-semibold">${avg.toFixed(1)}%</div></div></div>
+          <div class="col-md-3"><div class="card stat-card p-3"><div class="text-muted small">Critical (&gt;80%)</div><div class="fs-3 fw-semibold text-danger">${high}</div></div></div>
+          <div class="col-md-3"><div class="card stat-card p-3"><div class="text-muted small">Fire flags</div><div class="fs-3 fw-semibold">${fires}</div></div></div>`;
+
+        markers.forEach((m) => map.removeLayer(m));
+        markers = [];
+        bins.forEach((b) => {
+          const m = L.circleMarker([b.lat, b.lng], {
+            radius: 10,
+            color: binColor(b.fill_level),
+            fillColor: binColor(b.fill_level),
+            fillOpacity: 0.85,
+          }).addTo(map);
+          m.bindPopup(
+            `<strong>Bin ${b.id}</strong><br/>Fill: ${b.fill_level}%<br/>Gas: ${b.gas_level}`
+          );
+          markers.push(m);
+        });
+        if (bins.length) {
+          const g = L.featureGroup(markers);
+          map.fitBounds(g.getBounds().pad(0.15));
+        }
+
+        const route = await fetchJson("/api/route");
+        document.getElementById("routeSummary").textContent =
+          route.target_bin_count === 0
+            ? "No bins need pickup (≥80%). Route idle."
+            : `Optimal route: ${route.target_bin_count} stops, ~${route.totalDistanceKm} km (A*).`;
+
+        const alerts = await fetchJson("/api/alerts?limit=8");
+        const ul = document.getElementById("alertList");
+        if (!alerts.alerts.length) {
+          ul.innerHTML =
+            '<li class="list-group-item text-muted">No alerts yet.</li>';
+        } else {
+          ul.innerHTML = alerts.alerts
+            .map(
+              (a) =>
+                `<li class="list-group-item"><span class="badge bg-secondary me-2">${a.type}</span>${a.message}<div class="text-muted small">${a.timestamp}</div></li>`
+            )
+            .join("");
+        }
+      }
+
+      map = L.map("map").setView([40.758, -73.985], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap",
+      }).addTo(map);
+
+      refresh();
+      connectAlertsFeed(() => refresh());
+      setInterval(refresh, 8000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "smart-waste-api",
+  "version": "1.0.0",
+  "description": "Smart waste management simulation API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "ml-kmeans": "^6.0.0",
+    "ml-random-forest": "^2.1.0",
+    "ws": "^8.18.0"
+  }
+}

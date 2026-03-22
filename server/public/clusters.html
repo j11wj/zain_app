@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Waste — Clusters</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">Smart Waste Admin</a>
+      </div>
+    </nav>
+    <div class="container-fluid">
+      <div class="row">
+        <aside class="col-md-2 py-4 sidebar">
+          <nav class="nav flex-column px-2">
+            <a class="nav-link" href="/">Overview</a>
+            <a class="nav-link" href="/bins.html">Bins status</a>
+            <a class="nav-link" href="/alerts.html">Alerts</a>
+            <a class="nav-link" href="/reports.html">Reports</a>
+            <a class="nav-link active" href="/clusters.html">Clusters</a>
+          </nav>
+        </aside>
+        <main class="col-md-10 py-4 px-4">
+          <h1 class="h3 mb-2">K-means clusters</h1>
+          <p class="text-muted small mb-4">
+            Features: normalized latitude, longitude, and fill level (k=3 default).
+            Query <code>?k=4</code> to change cluster count.
+          </p>
+          <div class="card stat-card mb-3">
+            <div class="card-body">
+              <div id="map"></div>
+            </div>
+          </div>
+          <div id="clusterPanels" class="row g-3"></div>
+        </main>
+      </div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/common.js"></script>
+    <script>
+      const colors = ["#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51"];
+      const map = L.map("map").setView([40.758, -73.985], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap",
+      }).addTo(map);
+      let layers = [];
+
+      async function load() {
+        const q = new URLSearchParams(window.location.search);
+        const k = q.get("k") || "3";
+        const data = await fetchJson(`/api/clusters?k=${encodeURIComponent(k)}`);
+        layers.forEach((l) => map.removeLayer(l));
+        layers = [];
+        const panels = document.getElementById("clusterPanels");
+        panels.innerHTML = "";
+        data.clusters.forEach((cl, idx) => {
+          const color = colors[idx % colors.length];
+          const centroid = L.circleMarker([cl.centroid.lat, cl.centroid.lng], {
+            radius: 14,
+            color: "#000",
+            weight: 2,
+            fillColor: color,
+            fillOpacity: 0.5,
+          }).addTo(map);
+          centroid.bindPopup(`Cluster ${cl.id} centroid`);
+          layers.push(centroid);
+          cl.bins.forEach((b) => {
+            const m = L.circleMarker([b.lat, b.lng], {
+              radius: 8,
+              color,
+              fillColor: color,
+              fillOpacity: 0.85,
+            }).addTo(map);
+            m.bindPopup(`Bin ${b.id} · ${b.fill_level}%`);
+            layers.push(m);
+          });
+          panels.innerHTML += `
+            <div class="col-md-4">
+              <div class="card stat-card h-100">
+                <div class="card-body">
+                  <div class="fw-semibold mb-2" style="color:${color}">Cluster ${cl.id}</div>
+                  <div class="small text-muted mb-2">Centroid: ${cl.centroid.lat.toFixed(
+                    4
+                  )}, ${cl.centroid.lng.toFixed(4)} · avg fill ${cl.centroid.fill_level.toFixed(
+            1
+          )}%</div>
+                  <div class="small">Bins: ${cl.bins.map((b) => b.id).join(", ")}</div>
+                </div>
+              </div>
+            </div>`;
+        });
+        if (layers.length) {
+          const fg = L.featureGroup(layers);
+          map.fitBounds(fg.getBounds().pad(0.12));
+        }
+      }
+      load();
+      connectAlertsFeed(() => load());
+      setInterval(load, 12000);
+    </script>
+  </body>
+</html>
