@@ -42,6 +42,11 @@ function migrate() {
 
     CREATE INDEX IF NOT EXISTS idx_history_bin_time ON history(bin_id, timestamp);
     CREATE INDEX IF NOT EXISTS idx_alerts_time ON alerts(timestamp);
+
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 }
 

@@ -46,9 +46,24 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
   WebSocketChannel? _ws;
   Timer? _poll;
 
-  static const LatLng _fallback = LatLng(40.758, -73.985);
+  /// مدينة الديوانية (محافظة الديوانية، العراق) عند عدم توفر بيانات من الخادم بعد
+  static const LatLng _fallback = LatLng(31.9889, 44.924);
+  static const double _mapMinZoom = 3;
+  static const double _mapMaxZoom = 19;
   static const String _osmTileUrl =
       'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  void _zoomIn() {
+    final cam = _mapController.camera;
+    final z = (cam.zoom + 1).clamp(_mapMinZoom, _mapMaxZoom);
+    if (z != cam.zoom) _mapController.move(cam.center, z);
+  }
+
+  void _zoomOut() {
+    final cam = _mapController.camera;
+    final z = (cam.zoom - 1).clamp(_mapMinZoom, _mapMaxZoom);
+    if (z != cam.zoom) _mapController.move(cam.center, z);
+  }
 
   Color _markerColor(double fill) {
     if (fill < 50) return const Color(0xFF2D6A4F);
@@ -359,8 +374,8 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
           options: MapOptions(
             initialCenter: _fallback,
             initialZoom: 13,
-            minZoom: 3,
-            maxZoom: 19,
+            minZoom: _mapMinZoom,
+            maxZoom: _mapMaxZoom,
           ),
           children: [
             TileLayer(
@@ -386,6 +401,43 @@ class _DriverMapScreenState extends State<DriverMapScreen> {
           right: 8,
           top: 8,
           child: _statusChips(running, paused, intervalMs),
+        ),
+        Positioned(
+          right: 8,
+          bottom: 100,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'تكبير',
+                  onPressed: _zoomIn,
+                  icon: const Icon(Icons.add),
+                  iconSize: 22,
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                ),
+                Divider(height: 1, color: Colors.grey.shade300),
+                IconButton(
+                  tooltip: 'تصغير',
+                  onPressed: _zoomOut,
+                  icon: const Icon(Icons.remove),
+                  iconSize: 22,
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ),
         ),
         if (_error != null)
           Positioned(

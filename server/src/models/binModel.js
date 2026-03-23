@@ -2,8 +2,15 @@
  * Data access for bins and history (repository-style).
  */
 const { db } = require('../config/database');
+const {
+  DIWANIYAH_CENTER_LAT,
+  DIWANIYAH_CENTER_LNG,
+} = require('../config/geoDefaults');
 
 const BIN_COUNT = 15;
+
+/** ترحيل لمرة واحدة: إزالة مواقع العرض القديمة (مثلاً نيويورك) واستبدالها بمواقع داخل محافظة الديوانية */
+const META_KEY_DIWANIYAH_BINS = 'diwaniyah_bins_v1';
 
 function getAllBins() {
   return db.prepare('SELECT * FROM bins ORDER BY id').all();
@@ -61,34 +68,29 @@ function getAllHistoryAggregated(limitPerBin = 200) {
   return rows;
 }
 
-/**
- * Seed 15 bins around a center point if table is empty.
- */
-function seedBinsIfEmpty() {
-  const count = db.prepare('SELECT COUNT(*) AS c FROM bins').get().c;
-  if (count > 0) return;
+function _rngBinRow(i, centerLat, centerLng) {
+  const angle = (i / BIN_COUNT) * Math.PI * 2;
+  const r = 0.008 + (i % 5) * 0.0012;
+  return {
+    lat: centerLat + Math.cos(angle) * r + (i % 3) * 0.0004,
+    lng: centerLng + Math.sin(angle) * r + (i % 4) * 0.0003,
+    fill: 20 + (i * 7) % 55,
+    gas: 15 + (i * 11) % 40,
+    fire: 0,
+  };
+}
 
-  const centerLat = 40.758;
-  const centerLng = -73.9855;
+/**
+ * إدراج BIN_COUNT حاوية حول مركز الديوانية (بدون مسح الجداول).
+ */
+function insertDiwaniyahBins() {
   const insert = db.prepare(
     `INSERT INTO bins (lat, lng, fill_level, gas_level, fire_status) VALUES (?, ?, ?, ?, ?)`
   );
 
-  const rng = (i) => {
-    const angle = (i / BIN_COUNT) * Math.PI * 2;
-    const r = 0.008 + (i % 5) * 0.0012;
-    return {
-      lat: centerLat + Math.cos(angle) * r + (i % 3) * 0.0004,
-      lng: centerLng + Math.sin(angle) * r + (i % 4) * 0.0003,
-      fill: 20 + (i * 7) % 55,
-      gas: 15 + (i * 11) % 40,
-      fire: 0,
-    };
-  };
-
   const transaction = db.transaction(() => {
     for (let i = 0; i < BIN_COUNT; i++) {
-      const p = rng(i);
+      const p = _rngBinRow(i, DIWANIYAH_CENTER_LAT, DIWANIYAH_CENTER_LNG);
       insert.run(p.lat, p.lng, p.fill, p.gas, p.fire);
     }
   });
@@ -100,6 +102,38 @@ function seedBinsIfEmpty() {
   }
 }
 
+/**
+ * مرة واحدة بعد الترقية: حذف سجلّات الحاويات القديمة وإعادة الزرع داخل محافظة الديوانية.
+ */
+function migrateBinLocationsToDiwaniyahOnce() {
+  const row = db
+    .prepare('SELECT value FROM app_meta WHERE key = ?')
+    .get(META_KEY_DIWANIYAH_BINS);
+  if (row) return;
+
+  const txn = db.transaction(() => {
+    db.prepare('DELETE FROM history').run();
+    db.prepare('DELETE FROM alerts').run();
+    db.prepare('DELETE FROM bins').run();
+  });
+  txn();
+
+  insertDiwaniyahBins();
+  db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?)').run(
+    META_KEY_DIWANIYAH_BINS,
+    '1'
+  );
+}
+
+/**
+ * إذا بقيت الجداول فارغة (حالة نادرة)، زرع حاويات الديوانية.
+ */
+function seedBinsIfEmpty() {
+  const count = db.prepare('SELECT COUNT(*) AS c FROM bins').get().c;
+  if (count > 0) return;
+  insertDiwaniyahBins();
+}
+
 module.exports = {
   BIN_COUNT,
   getAllBins,
@@ -109,5 +143,6 @@ module.exports = {
   getHistoryForBin,
   getAllHistoryAggregated,
   getMonthlyHistoryStats,
+  migrateBinLocationsToDiwaniyahOnce,
   seedBinsIfEmpty,
 };

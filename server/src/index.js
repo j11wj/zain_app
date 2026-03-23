@@ -8,11 +8,12 @@ const app = require('./app');
 const binModel = require('./models/binModel');
 const simulationService = require('./services/simulationService');
 
+binModel.migrateBinLocationsToDiwaniyahOnce();
 binModel.seedBinsIfEmpty();
 
 const port = parseInt(process.env.PORT || '3000', 10);
 /** 0.0.0.0 = استقبال من أي واجهة شبكة (مناسب للسيرفر). استخدم 127.0.0.1 للتطوير المحلي فقط. */
-const host = process.env.HOST || '0.0.0.0';
+const host =   '192.168.1.185';
 const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server, path: '/ws' });

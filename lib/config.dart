@@ -60,6 +60,6 @@ class AppConfig {
     // if (defaultTargetPlatform == TargetPlatform.android) {
     //   return 'http://$_androidHost:$_port';
     // }
-    return 'http://192.168.1.171:$_port';
+    return 'http://192.168.1.185:$_port';
   }
 }
